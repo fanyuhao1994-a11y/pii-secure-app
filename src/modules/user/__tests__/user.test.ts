@@ -130,11 +130,14 @@ describe('1. Zod 参数校验逻辑拦截', () => {
   });
 
   describe('5. 审计日志落盘断言', () => {
-    it('数据库中应记录正确的 PII 读取与盲索引搜索审计日志', async () => {
-      const result = await db.query(
-        `SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 5`
-      );
-      expect(result.rows.length).toBeGreaterThan(0);
-    });
+  it('数据库中应记录正确的 PII 读取与盲索引搜索审计日志', async () => {
+    // 💡 增加 100ms 延迟，确保第 4 步接口触发的异步审计日志完成数据库落盘
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const result = await db.query(
+      `SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 5`
+    );
+    expect(result.rows.length).toBeGreaterThan(0);
   });
+});
 });
