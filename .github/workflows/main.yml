@@ -46,12 +46,12 @@ jobs:
         env:
           PORT: 3000
           NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/pii_db
           DB_HOST: localhost
           DB_PORT: 5432
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           DB_NAME: pii_db
-          # 必须为精确 64 位 Hex 字符 (32 Bytes)
           PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           PII_BLIND_INDEX_SALT: test_blind_index_salt_secret
           JWT_SECRET: super_secret_jwt_key
