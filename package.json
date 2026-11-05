@@ -4,9 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand",
-    "type-check": "tsc --noEmit",
-    "build": "tsc"
+  "dev": "npm run build && node dist/app.js",
+  "build": "tsc",
+  "start": "node dist/app.js",
+  "test": "jest",
+  "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
