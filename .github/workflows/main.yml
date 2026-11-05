@@ -42,7 +42,7 @@ jobs:
         run: npm run type-check
 
       - name: Initialize Database Schema
-        run: PGPASSWORD=postgrespassword psql -h localhost -U postgres -d pii_db -f scripts/init-db.sql
+        run: PGPASSWORD=postgrespassword psql -h localhost -U postgres -d pii_db -f src/scripts/init-db.sql
 
       - name: Run Tests
         run: npm test
