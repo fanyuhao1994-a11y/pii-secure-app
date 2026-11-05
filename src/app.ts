@@ -25,4 +25,12 @@ app.use('/', userRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// src/app.ts 底部添加：
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📚 Swagger docs available at http://localhost:${PORT}/api-docs`);
+});
+
 export default app;
