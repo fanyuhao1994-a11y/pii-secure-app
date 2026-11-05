@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
+import { logger } from '../utils/logger';
 
 // 404 路由未找到兜底
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
@@ -56,7 +57,7 @@ export const errorHandler = (
   }
 
   // 5. 未知的系统级致命异常 (500)
-  console.error('🔥 [Unhandled Error]:', err);
+  logger.error({ err }, '🔥 [Unhandled Error]');
   return res.status(500).json({
     status: 500,
     code: 'INTERNAL_SERVER_ERROR',
