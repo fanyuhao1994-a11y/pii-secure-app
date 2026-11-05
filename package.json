@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "type-check": "tsc --noEmit",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",

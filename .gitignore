@@ -1,2 +1,19 @@
+# 依赖包
 node_modules/
+
+# 编译构建输出目录
+dist/
+build/
+
+# 本地环境变量与密钥（严禁提交）
 .env
+.env.local
+.env.*.local
+
+# 测试覆盖率与测试输出
+coverage/
+
+# 系统与日志临时文件
+*.log
+npm-debug.log*
+.DS_Store
