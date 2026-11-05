@@ -51,6 +51,7 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           DB_NAME: pii_db
-          PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+          # 必须为精确 64 位 Hex 字符 (32 Bytes)
+          PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           PII_BLIND_INDEX_SALT: test_blind_index_salt_secret
           JWT_SECRET: super_secret_jwt_key
