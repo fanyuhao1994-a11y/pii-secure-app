@@ -1,5 +1,6 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { UserService } from './user.service';
+import { AppError, NotFoundError } from '../../errors/AppError';
 
 export class UserController {
   private userService: UserService;
@@ -8,42 +9,50 @@ export class UserController {
     this.userService = new UserService();
   }
 
-  async register(req: Request, res: Response) {
+  // 1. 用户注册
+  async register(req: Request, res: Response, next: NextFunction) {
     try {
       const user = await this.userService.createUser(req.body);
       return res.status(201).json({ status: 201, data: user });
-    } catch (err: any) {
-      return res.status(500).json({ status: 500, error: err.message });
+    } catch (err) {
+      next(err); // 投递给全局错误处理中间件
     }
   }
 
-  async getProfile(req: Request, res: Response) {
+  // 2. 获取个人档案
+  async getProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const operator = (req as any).user;
       const user = await this.userService.getUserById(operator.id, operator);
+
+      if (!user) {
+        throw new NotFoundError('用户不存在');
+      }
+
       return res.status(200).json({ status: 200, data: user });
-    } catch (err: any) {
-      return res.status(500).json({ status: 500, error: err.message });
+    } catch (err) {
+      next(err);
     }
   }
 
-  async search(req: Request, res: Response) {
+  // 3. 盲索引精确搜索
+  async search(req: Request, res: Response, next: NextFunction) {
     try {
       const phone = req.query.phone as string;
       if (!phone) {
-        return res.status(400).json({ status: 400, message: '缺少 phone 查询参数' });
+        throw new AppError('缺少 phone 查询参数', 400);
       }
 
       const operator = (req as any).user;
       const user = await this.userService.searchUserByPhone(phone, operator);
 
       if (!user) {
-        return res.status(404).json({ status: 404, message: '未找到对应用户' });
+        throw new NotFoundError('未找到对应用户');
       }
 
       return res.status(200).json({ status: 200, data: user });
-    } catch (err: any) {
-      return res.status(500).json({ status: 500, error: err.message });
+    } catch (err) {
+      next(err);
     }
   }
 }
