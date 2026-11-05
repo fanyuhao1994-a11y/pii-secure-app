@@ -18,12 +18,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_phone_blind_index ON users(phone_blind_index);
 CREATE INDEX IF NOT EXISTS idx_users_email_blind_index ON users(email_blind_index);
 
--- 2. 创建审计日志表
+-- 2. 创建审计日志表 (补充 details 字段)
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   operator_id UUID NOT NULL,
   operator_role VARCHAR(20) NOT NULL,
   action VARCHAR(50) NOT NULL,
   target_user_id UUID NOT NULL,
+  details JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
