@@ -15,16 +15,16 @@ describe('PII Secure Backend API Integration Tests', () => {
   const jwtSecret = process.env.JWT_SECRET || 'default_jwt_secret';
 
   // 清理测试脏数据
-  const cleanTestData = async () => {
-    await db.query(`
-      DELETE FROM audit_logs WHERE operator_id IN (
-        SELECT id::text FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
-      ) OR target_user_id IN (
-        SELECT id::text FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
-      );
-      DELETE FROM users WHERE nickname IN ('TestMember', 'TestAdmin');
-    `);
-  };
+const cleanTestData = async () => {
+  await db.query(`
+    DELETE FROM audit_logs WHERE operator_id IN (
+      SELECT id FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
+    ) OR target_user_id IN (
+      SELECT id FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
+    );
+    DELETE FROM users WHERE nickname IN ('TestMember', 'TestAdmin');
+  `);
+};
 
   beforeAll(async () => {
     await cleanTestData();
