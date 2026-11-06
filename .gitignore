@@ -5,10 +5,15 @@ node_modules/
 dist/
 build/
 
-# 本地环境变量与密钥（严禁提交）
+# 防止在 src 源文件目录下残留编译产物（解决 user.test.d.ts 这类干扰问题）
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
+
+# 本地环境变量与密钥（严禁提交真正密钥，但必须放行模板文件）
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # 测试覆盖率与测试输出
 coverage/
