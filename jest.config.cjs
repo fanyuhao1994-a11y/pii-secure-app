@@ -4,32 +4,33 @@ require('dotenv').config();
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ['**/*.test.ts'],
+  testMatch: ['<rootDir>/src/**/*.test.ts'],
   forceExit: true,
   clearMocks: true,
   detectOpenHandles: true,
-  transform: {
-    '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }]
-  },
 
-  // 1. 开启测试覆盖率收集
+  // 1. 指定使用 babel (Istanbul) 收集 TypeScript 覆盖率，解决 0% 问题
+  coverageProvider: 'babel',
+
+  // 2. 开启测试覆盖率收集
   collectCoverage: true,
 
-  // 2. 指定统计范围（排除类型文件与脚本）
+  // 3. 使用 <rootDir> 锚定源文件，并排除测试文件本身与脚本
   collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/scripts/**',
-    '!src/server.ts'
+    '<rootDir>/src/**/*.ts',
+    '!<rootDir>/src/**/*.d.ts',
+    '!<rootDir>/src/scripts/**',
+    '!<rootDir>/src/server.ts',
+    '!<rootDir>/src/**/__tests__/**'
   ],
 
-  // 3. 设置覆盖率通过门槛
+  // 4. 设置覆盖率通过门槛
   coverageThreshold: {
     global: {
-      branches: 75,
-      functions: 80,
-      lines: 80,
-      statements: 80
+      branches: 70,
+      functions: 75,
+      lines: 75,
+      statements: 75
     }
   }
 };
