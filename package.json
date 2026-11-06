@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "build": "tsc",
-  "start": "node dist/app.js",
-  "type-check": "tsc --noEmit",
-  "lint": "tsc --noEmit",
-  "test": "jest --coverage"
-},
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "type-check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "jest --coverage"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
