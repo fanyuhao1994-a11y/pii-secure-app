@@ -1,4 +1,4 @@
-name: CI Workflow
+name: CI/CD Workflow
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
+  # 1. CI 测试
   test:
     runs-on: ubuntu-latest
 
@@ -29,10 +30,9 @@ jobs:
       NODE_ENV: test
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/pii_db
-      # 从 GitHub Repository Secrets 中安全读取
-      PII_ENCRYPTION_KEY: ${{ secrets.PII_ENCRYPTION_KEY }}
-      PII_BLIND_INDEX_SALT: ${{ secrets.PII_BLIND_INDEX_SALT }}
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      PII_ENCRYPTION_KEY: ${{ secrets.PII_ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' }}
+      PII_BLIND_INDEX_SALT: ${{ secrets.PII_BLIND_INDEX_SALT || 'c9cf5a1e7a0353c10441a3c547736fd5bd0865da0601382bfef5ef6dbe2a8f14' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'super_secret_jwt_key_2026_pii_secure' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,3 +49,43 @@ jobs:
 
       - name: Run Tests with Coverage
         run: npm test
+
+  # 2. CD 构建与镜像推送
+  build-and-push:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
