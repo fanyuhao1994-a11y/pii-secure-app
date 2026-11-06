@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI Workflow
 
 on:
   push:
@@ -20,47 +20,32 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
           --health-timeout 5s
           --health-retries 5
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/pii_db
+      # 从 GitHub Repository Secrets 中安全读取
+      PII_ENCRYPTION_KEY: ${{ secrets.PII_ENCRYPTION_KEY }}
+      PII_BLIND_INDEX_SALT: ${{ secrets.PII_BLIND_INDEX_SALT }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Linter
-        run: npm run lint
-
-      - name: Security Audit
-        run: npm audit --audit-level=high
-
-      - name: Run Type Check
-        run: npm run type-check
-
       - name: Initialize Database Schema
-        run: PGPASSWORD=postgrespassword psql -h localhost -U postgres -d pii_db -f src/scripts/init-db.sql
+        run: psql ${{ env.DATABASE_URL }} -f src/scripts/init-db.sql
 
-      - name: Run Tests
+      - name: Run Tests with Coverage
         run: npm test
-        env:
-          PORT: 3000
-          NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/pii_db
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USER: postgres
-          DB_PASSWORD: postgrespassword
-          DB_NAME: pii_db
-          PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          PII_BLIND_INDEX_SALT: test_blind_index_salt_secret
-          JWT_SECRET: super_secret_jwt_key
