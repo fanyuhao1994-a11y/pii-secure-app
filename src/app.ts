@@ -1,18 +1,19 @@
 import express from 'express';
-import { runMigrations } from './db/migrator'; // 👈 导入 Migration 执行器
+import { runMigrations } from './db/migrator';
+import userRouter from './modules/user/user.router';
 
 const app = express();
+app.use(express.json());
+app.use('/api/v1/users', userRouter);
 
-// ...（其他中间件和路由配置，如 app.use(express.json()) 等）...
-
-async function startServer() {
+export async function startServer() {
   try {
-    // 1. 优先执行数据库自动迁移（建表与更新索引）
+    // 1. 优先执行数据库自动迁移
     await runMigrations();
 
-    // 2. 迁移完成后，再启动 Express 服务监听端口
+    // 2. 迁移完成后启动端口监听
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
+    return app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📚 Swagger docs available at http://localhost:${PORT}/api-docs`);
     });
@@ -22,4 +23,10 @@ async function startServer() {
   }
 }
 
-startServer();
+// 仅在非测试环境下（直接运行该文件时）自动启动服务器
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+// 👈 导出 app 供 Supertest 单元测试使用，解决 TS1192 报错
+export default app;

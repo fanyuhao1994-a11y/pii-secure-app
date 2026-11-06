@@ -1,48 +1,43 @@
-import fs from 'fs';
-import path from 'path';
-import { db } from './index'; // 👈 导入 db
+import { db } from './index';
 
 export async function runMigrations() {
-  const client = await db.connect(); // 👈 使用 db.connect()
+  const client = await db.connect();
   try {
     await client.query('BEGIN');
 
-    // 建立版本控制表
+    // 1. 建立版本控制表
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         id SERIAL PRIMARY KEY,
         version VARCHAR(255) NOT NULL UNIQUE,
-        applied_at TIMESTAMP WITH TIMEZONE DEFAULT CURRENT_TIMESTAMP
+        applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // 获取已经执行过的 migration
-    const { rows } = await client.query('SELECT version FROM schema_migrations');
-    const appliedVersions = new Set(rows.map((r: { version: string }) => r.version));
+    // 2. 建立用户 PII 表（如果表已存在则不会报错）
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email_encrypted TEXT NOT NULL,
+        email_blind_index VARCHAR(64) NOT NULL UNIQUE,
+        name_encrypted TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    // 兼顾开发环境 (src/) 与生产编译环境 (dist/) 的 migrations 目录
-    const migrationsDir = fs.existsSync(path.join(__dirname, 'migrations'))
-      ? path.join(__dirname, 'migrations')
-      : path.join(process.cwd(), 'src', 'db', 'migrations');
+    // 3. 【关键修复】针对已有旧表但缺字段的情况，动态安全补全字段
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_encrypted TEXT;');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_blind_index VARCHAR(64);');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_encrypted TEXT;');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;');
 
-    if (!fs.existsSync(migrationsDir)) {
-      await client.query('COMMIT');
-      return;
-    }
-
-    const files = fs.readdirSync(migrationsDir).sort();
-
-    for (const file of files) {
-      if (file.endsWith('.sql') && !appliedVersions.has(file)) {
-        console.log(`Executing migration: ${file}`);
-        const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-        await client.query(sql);
-        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
-      }
-    }
+    // 4. 创建盲索引
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email_blind ON users(email_blind_index);
+    `);
 
     await client.query('COMMIT');
-    console.log('✅ All database migrations applied successfully.');
+    console.log('✅ Database migrations applied and synced successfully.');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);
