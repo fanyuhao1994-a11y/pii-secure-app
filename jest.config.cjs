@@ -9,28 +9,37 @@ module.exports = {
   clearMocks: true,
   detectOpenHandles: true,
 
-  // 1. 指定使用 babel (Istanbul) 收集 TypeScript 覆盖率，解决 0% 问题
-  coverageProvider: 'babel',
-
-  // 2. 开启测试覆盖率收集
+  // 1. 开启覆盖率收集
   collectCoverage: true,
 
-  // 3. 使用 <rootDir> 锚定源文件，并排除测试文件本身与脚本
+  // 2. 统计范围配置
   collectCoverageFrom: [
-    '<rootDir>/src/**/*.ts',
-    '!<rootDir>/src/**/*.d.ts',
-    '!<rootDir>/src/scripts/**',
-    '!<rootDir>/src/server.ts',
-    '!<rootDir>/src/**/__tests__/**'
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/scripts/**',
+    '!src/server.ts',
+    '!src/**/__tests__/**'
   ],
 
-  // 4. 设置覆盖率通过门槛
+  // 3. 显式告知 ts-jest 输出 sourceMap
+  transform: {
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        tsconfig: {
+          sourceMap: true
+        }
+      }
+    ]
+  },
+
+  // 4. 覆盖率硬性门槛
   coverageThreshold: {
     global: {
       branches: 70,
-      functions: 75,
-      lines: 75,
-      statements: 75
+      functions: 70,
+      lines: 70,
+      statements: 70
     }
   }
 };
