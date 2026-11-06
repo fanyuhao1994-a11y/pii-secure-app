@@ -1,16 +1,23 @@
+
 services:
+  app:
+    image: ghcr.io/fanyuhao1994-a11y/pii-secure-app:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/pii_db
+      - PII_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - PII_BLIND_INDEX_SALT=c9cf5a1e7a0353c10441a3c547736fd5bd0865da0601382bfef5ef6dbe2a8f14
+      - JWT_SECRET=super_secret_jwt_key_2026_pii_secure
+    depends_on:
+      - db
+
   db:
     image: postgres:15-alpine
-    container_name: pii_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: pii_db
     ports:
       - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
-
-volumes:
-  pgdata:
