@@ -17,12 +17,15 @@ describe('PII Secure Backend API Integration Tests', () => {
   // 清理测试脏数据
 const cleanTestData = async () => {
   await db.query(`
-    DELETE FROM audit_logs WHERE operator_id IN (
-      SELECT id FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
-    ) OR target_user_id IN (
-      SELECT id FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
-    );
-    DELETE FROM users WHERE nickname IN ('TestMember', 'TestAdmin');
+    DELETE FROM audit_logs WHERE operator_id::text IN (
+      SELECT id::text FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
+    ) OR target_user_id::text IN (
+      SELECT id::text FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
+    )
+  `);
+
+  await db.query(`
+    DELETE FROM users WHERE nickname IN ('TestMember', 'TestAdmin')
   `);
 };
 
