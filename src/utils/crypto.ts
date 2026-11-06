@@ -25,7 +25,11 @@ export function encryptField(plainText: string): string {
   if (!plainText) return '';
 
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ALGORITHM, config.piiEncryptionKey, iv);
+  const cipher = crypto.createCipheriv(
+  ALGORITHM, 
+  Buffer.from(config.piiEncryptionKey, 'hex'), 
+  iv
+);
 
   let encrypted = cipher.update(plainText, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -56,10 +60,10 @@ export function decryptField(encryptedPayload: string): string {
   }
 
   const decipher = crypto.createDecipheriv(
-    ALGORITHM,
-    config.piiEncryptionKey,
-    Buffer.from(ivHex, 'hex')
-  );
+  ALGORITHM,
+  Buffer.from(config.piiEncryptionKey, 'hex'),
+  Buffer.from(ivHex, 'hex')
+);
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
 
   let decrypted = decipher.update(ciphertextHex, 'hex', 'utf8');
