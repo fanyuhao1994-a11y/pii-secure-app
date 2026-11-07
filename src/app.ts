@@ -6,6 +6,18 @@ const app = express();
 app.use(express.json());
 app.use('/api/v1/users', userRouter);
 
+app.get('/', (req, res) => {
+  res.send('PII Secure Application standard API is up and running!');
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'PII Secure Application service is healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+
 export async function startServer() {
   try {
     // 1. 优先执行数据库自动迁移
