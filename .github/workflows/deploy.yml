@@ -46,7 +46,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # 关键修复：构建镜像前先编译生成 dist 目录
+      # 构建 Docker 镜像前先编译生成 dist 目录
       - name: Install dependencies and build project
         run: |
           npm ci
@@ -69,6 +69,7 @@ jobs:
           load: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp
 
+      # 执行 Trivy 安全扫描
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -79,6 +80,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
+      # 扫描通过后推送生产镜像
       - name: Push production Docker image
         if: success()
         uses: docker/build-push-action@v5
@@ -99,7 +101,7 @@ jobs:
         with:
           host: 3.26.15.122
           username: ubuntu
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER }}
           script: |
             cd /opt/pii-secure-app
             docker compose pull

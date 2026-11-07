@@ -1,19 +1,16 @@
-FROM node:22-alpine
+# 切换为基于 Alpine 的安全瘦身镜像
+FROM node:20-alpine
 
 WORKDIR /app
 
-# 设置生产环境变量
-ENV NODE_ENV=production
-
-# 1. 仅复制依赖定义文件，只安装生产依赖（只留 node_modules 必要的包）
 COPY package*.json ./
+
+# 仅安装生产依赖
 RUN npm ci --only=production
 
-# 2. 直接复制 CI 宿主机（Runner）上已经编译好的 dist 产物
+# 复制编译产物
 COPY dist ./dist
 
-# 3. 暴露服务端口（根据项目实际情况调整，默认 3000）
 EXPOSE 3000
 
-# 4. 启动应用
-CMD ["node", "dist/app.js"]
+CMD ["node", "dist/index.js"]
