@@ -6,6 +6,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - PII_ENCRYPTION_KEY=${PII_ENCRYPTION_KEY}
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/pii_db
       - PII_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       - PII_BLIND_INDEX_SALT=c9cf5a1e7a0353c10441a3c547736fd5bd0865da0601382bfef5ef6dbe2a8f14
