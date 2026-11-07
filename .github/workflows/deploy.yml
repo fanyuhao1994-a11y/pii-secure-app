@@ -1,0 +1,97 @@
+name: CI/CD Pipeline with Security Scan
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # 阶段 1：依赖项漏洞检测与测试
+  test-and-scan-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit (Block on High/Critical vulnerabilities)
+        run: npm audit --audit-level=high
+
+  # 阶段 2：构建 Docker 镜像并使用 Trivy 进行安全扫描
+  build-and-scan-image:
+    needs: test-and-scan-deps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 先构建本地镜像用于漏洞扫描
+      - name: Build temporary local image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp
+
+      # 使用 Trivy 扫描容器镜像
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp'
+          format: 'table'
+          exit-code: '1'          # 当发现 HIGH 或 CRITICAL 漏洞时强制终止构建（退出码 1）
+          ignore-unfixed: true    # 忽略目前尚无官方修复补丁的已知漏洞
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # 安全扫描通过后，才正式推送镜像至 GHCR
+      - name: Push production Docker image
+        if: success()
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # 阶段 3：自动部署至 AWS EC2
+  deploy:
+    needs: build-and-scan-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 3.26.15.122
+          username: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/pii-secure-app
+            docker compose pull
+            docker compose up -d --remove-orphans
