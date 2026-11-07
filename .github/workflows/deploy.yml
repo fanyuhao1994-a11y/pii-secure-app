@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 阶段 1：依赖项漏洞检测与测试
+  # 阶段 1：依赖项漏洞检测
   test-and-scan-deps:
     runs-on: ubuntu-latest
     steps:
@@ -25,10 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run npm audit (Block on High/Critical vulnerabilities)
+      - name: Run npm audit
         run: npm audit --audit-level=high
 
-  # 阶段 2：构建 Docker 镜像并使用 Trivy 进行安全扫描
+  # 阶段 2：编译项目、构建镜像并进行 Trivy 漏洞扫描
   build-and-scan-image:
     needs: test-and-scan-deps
     runs-on: ubuntu-latest
@@ -40,6 +40,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 关键修复：构建镜像前先编译生成 dist 目录
+      - name: Install dependencies and build project
+        run: |
+          npm ci
+          npm run build
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -50,7 +62,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 先构建本地镜像用于漏洞扫描
       - name: Build temporary local image
         uses: docker/build-push-action@v5
         with:
@@ -58,18 +69,16 @@ jobs:
           load: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp
 
-      # 使用 Trivy 扫描容器镜像
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp'
           format: 'table'
-          exit-code: '1'          # 当发现 HIGH 或 CRITICAL 漏洞时强制终止构建（退出码 1）
-          ignore-unfixed: true    # 忽略目前尚无官方修复补丁的已知漏洞
+          exit-code: '1'
+          ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      # 安全扫描通过后，才正式推送镜像至 GHCR
       - name: Push production Docker image
         if: success()
         uses: docker/build-push-action@v5
