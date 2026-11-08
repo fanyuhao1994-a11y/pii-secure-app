@@ -1,59 +1,32 @@
-import express from 'express';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import { runMigrations } from './db/migrator';
-import userRouter from './modules/user/user.router';
+import express from "express";
+import * as Sentry from "@sentry/node";
 
 const app = express();
 
-// 1. 设置 HTTP 安全响应头 (防护 XSS、Clickjacking 等)
-app.use(helmet());
-
-// 2. 配置代理支持（由于前置使用了 Nginx 反向代理）
-app.set('trust proxy', 1);
-
-// 3. 配置通用 API 限流：每个 IP 在 15 分钟内最多允许 100 次请求
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { status: 429, message: 'Too many requests, please try again later.' },
-});
-app.use('/api/', globalLimiter);
-
-// 4. 解析 JSON 请求体
-app.use(express.json({ limit: '10kb' })); // 限制 Payload 大小，防御 DOS 攻击
-
-app.use('/api/v1/users', userRouter);
-
-app.get('/', (req, res) => {
-  res.send('PII Secure Application standard API is up and running!');
+// 1. 初始化 Sentry（必须放置在所有代码最前列）
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || "production",
+  tracesSampleRate: 1.0, // 采样率 100%
 });
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'PII Secure Application service is healthy',
-    timestamp: new Date().toISOString()
-  });
+// 基础中间件解析
+app.use(express.json());
+
+// ---------------- 你的业务路由定义 ----------------
+// app.use("/api/users", userRoutes);
+
+// 测试 Sentry 告警的临时接口（验证后可删除）
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("Sentry 生产环境测试异常！");
 });
 
-export async function startServer() {
-  try {
-    await runMigrations();
-    const PORT = process.env.PORT || 3000;
-    return app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error('💥 Failed to start application:', error);
-    process.exit(1);
-  }
-}
+// 2. 挂载 Sentry 错误捕获中间件（必须放在所有业务路由之后，自定义 error handler 之前）
+Sentry.setupExpressErrorHandler(app);
 
-if (process.env.NODE_ENV !== 'test') {
-  startServer();
-}
+// 3. 自定义错误处理中间件
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  res.status(500).json({ error: "Internal Server Error" });
+});
 
 export default app;
