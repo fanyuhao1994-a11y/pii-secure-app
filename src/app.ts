@@ -29,4 +29,12 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: "Internal Server Error" });
 });
 
+const PORT = process.env.PORT || 3000;
+
+// 启动端口监听，保持 Node.js 进程持续运行
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`📚 Debug route available at http://localhost:${PORT}/debug-sentry`);
+});
+
 export default app;
