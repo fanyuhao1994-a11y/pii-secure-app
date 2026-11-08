@@ -37,4 +37,9 @@ app.listen(PORT, () => {
   console.log(`📚 Debug route available at http://localhost:${PORT}/debug-sentry`);
 });
 
+// 补齐根路由，用于健康检查
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'PII Secure App API Ready' });
+});
+
 export default app;
