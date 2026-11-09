@@ -1,24 +1,25 @@
+version: '3.8'
 
 services:
   app:
-    image: ghcr.io/fanyuhao1994-a11y/pii-secure-app:latest
+    build: .
+    restart: always
+    env_file:
+      - .env
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PII_ENCRYPTION_KEY=${PII_ENCRYPTION_KEY}
-      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/pii_db
-      - PII_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      - PII_BLIND_INDEX_SALT=c9cf5a1e7a0353c10441a3c547736fd5bd0865da0601382bfef5ef6dbe2a8f14
-      - JWT_SECRET=super_secret_jwt_key_2026_pii_secure
     depends_on:
       - db
 
   db:
     image: postgres:15-alpine
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: pii_db
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:-pii_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
