@@ -102,5 +102,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/pii-secure-app
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker compose up -d --build --remove-orphans
