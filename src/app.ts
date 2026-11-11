@@ -1,39 +1,48 @@
-import express from "express";
-import * as Sentry from "@sentry/node";
+import express from 'express';
+import * as Sentry from '@sentry/node';
+import userRouter from './modules/user/user.router';
+import { autoMaskMiddleware } from './middlewares/privacy';
 
 const app = express();
 
-// 1. 初始化 Sentry（必须放置在所有代码最前列）
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || "production",
-  tracesSampleRate: 1.0, // 采样率 100%
-});
+// 1. 初始化 Sentry（测试环境自动禁用，避免模拟崩溃污染看板）
+if (process.env.NODE_ENV !== 'test') {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    tracesSampleRate: 1.0,
+  });
+}
 
-// 基础中间件解析
+// 2. 基础解析与安全脱敏中间件
 app.use(express.json());
+app.use(autoMaskMiddleware);
 
-// ---------------- 你的业务路由定义 ----------------
-// app.use("/api/users", userRoutes);
+// 3. 业务路由（匹配测试套件的 /api/v1/users）
+app.use('/api/v1/users', userRouter);
 
-// 2. 挂载 Sentry 错误捕获中间件（必须放在所有业务路由之后，自定义 error handler 之前）
-Sentry.setupExpressErrorHandler(app);
-
-// 3. 自定义错误处理中间件
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  res.status(500).json({ error: "Internal Server Error" });
-});
-
-const PORT = process.env.PORT || 3000;
-
-// 启动端口监听，保持 Node.js 进程持续运行
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-});
-
-// 补齐根路由，用于健康检查
+// 根路由健康检查
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'PII Secure App API Ready' });
 });
+
+// 4. 异常处理中间件
+Sentry.setupExpressErrorHandler(app);
+
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const statusCode = err.statusCode || err.status || 500;
+  res.status(statusCode).json({
+    status: statusCode,
+    message: err.message || 'Internal Server Error',
+  });
+});
+
+// 5. 仅在非测试环境下监听端口
+const PORT = process.env.PORT || 3000;
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;

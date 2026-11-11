@@ -1,4 +1,4 @@
-name: CI/CD Pipeline with Security Scan
+name: CI/CD Pipeline & EC2 Deploy
 
 on:
   push:
@@ -9,9 +9,26 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 阶段 1：依赖项漏洞检测
-  test-and-scan-deps:
+  # 阶段 1：PostgreSQL 服务容器 + 单元与集成测试门禁 + 依赖审计
+  test-and-audit:
+    name: Test Suite & Security Audit
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: pii_secure_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,11 +43,22 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=high || true  # 记录审计日志，避免因次要漏洞挂掉
+        run: npm audit --audit-level=high || true
 
-  # 阶段 2：编译项目、构建镜像并进行 Trivy 漏洞扫描
+      - name: Run Full Test Suite with Coverage Gate
+        env:
+          NODE_ENV: test
+          PORT: 3000
+          DATABASE_URL: postgres://postgres:postgrespassword@localhost:5432/pii_secure_db
+          PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PII_BLIND_INDEX_SALT: test-salt-string-for-blind-index
+          JWT_SECRET: super-secure-jwt-secret-for-testing
+        run: npm test
+
+  # 阶段 2：构建镜像、Trivy 漏洞扫描、推送到 GHCR
   build-and-scan-image:
-    needs: test-and-scan-deps
+    name: Build, Scan & Push Docker Image
+    needs: test-and-audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,17 +67,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies and build project
-        run: |
-          npm ci
-          npm run build
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,26 +78,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build temporary local image
+      - name: Build temporary local image for scanning
         uses: docker/build-push-action@v5
         with:
           context: .
           load: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp
 
-      # Trivy 安全扫描：输出报告但不阻塞 CI/CD（exit-code: 0）
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-tmp'
           format: 'table'
-          exit-code: '0'       # <--- 设为 0，保留漏洞日志审计，不阻断部署
+          exit-code: '0'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
       - name: Push production Docker image
-        if: success()
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -91,6 +106,7 @@ jobs:
 
   # 阶段 3：自动部署至 AWS EC2
   deploy:
+    name: Deploy to EC2
     needs: build-and-scan-image
     runs-on: ubuntu-latest
     steps:

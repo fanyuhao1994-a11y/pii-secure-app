@@ -1,14 +1,8 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
-
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error('配置错误: 环境变量 DATABASE_URL 未定义');
-}
+import { config } from '../config/env';
 
 export const db = new Pool({
-  connectionString,
+  connectionString: config.databaseUrl,
   // 数据库连接池配置
   max: 10,
   idleTimeoutMillis: 30000,

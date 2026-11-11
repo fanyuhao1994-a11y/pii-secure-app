@@ -26,10 +26,10 @@ export function encryptField(plainText: string): string {
 
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(
-  ALGORITHM, 
-  Buffer.from(config.piiEncryptionKey, 'hex'), 
-  iv
-);
+    ALGORITHM,
+    Buffer.from(config.piiEncryptionKey, 'hex'),
+    iv
+  );
 
   let encrypted = cipher.update(plainText, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -38,7 +38,6 @@ export function encryptField(plainText: string): string {
   return `${iv.toString('hex')}:${encrypted}:${tag}`;
 }
 
-/**
 /**
  * 3. 字段解密 (AES-256-GCM)
  */
@@ -60,10 +59,10 @@ export function decryptField(encryptedPayload: string): string {
   }
 
   const decipher = crypto.createDecipheriv(
-  ALGORITHM,
-  Buffer.from(config.piiEncryptionKey, 'hex'),
-  Buffer.from(ivHex, 'hex')
-);
+    ALGORITHM,
+    Buffer.from(config.piiEncryptionKey, 'hex'),
+    Buffer.from(ivHex, 'hex')
+  );
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
 
   let decrypted = decipher.update(ciphertextHex, 'hex', 'utf8');

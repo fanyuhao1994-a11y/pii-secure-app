@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../../app';
@@ -165,6 +165,80 @@ describe('PII Secure Backend API Integration Tests', () => {
         `SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 5`
       );
       expect(result.rows.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('6. 异常边界与错误处理断言 (覆盖率提升)', () => {
+    it('当盲索引查询不存在的用户时应返回 404 Not Found', async () => {
+      const res = await request(app)
+        .get('/api/v1/users/search?phone=13900000000')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe('未找到对应用户');
+    });
+
+    it('当盲索引查询缺少 phone 查询参数时应返回 400 Bad Request', async () => {
+      const res = await request(app)
+        .get('/api/v1/users/search')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('当访问不存在的用户 ID 时应返回 404 Not Found', async () => {
+      // 构造一个合法的 UUID 但该用户不存在
+      const nonExistentUserId = '00000000-0000-0000-0000-000000000000';
+      const fakeToken = jwt.sign(
+        { id: nonExistentUserId, userId: nonExistentUserId, role: 'MEMBER' },
+        jwtSecret,
+        { expiresIn: '1h' }
+      );
+
+      const res = await request(app)
+        .get('/api/v1/users/me')
+        .set('Authorization', `Bearer ${fakeToken}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe('用户不存在');
+    });
+  });
+
+  describe('7. Controller & Service 内部异常抛出覆盖', () => {
+    it('当注册服务内部崩溃抛出未预期错误时，Controller 应正确 catch 并投递给 next', async () => {
+      const { UserService } = require('../user.service');
+      const spy = jest.spyOn(UserService.prototype, 'createUser').mockRejectedValueOnce(new Error('DB_PANIC'));
+
+      const res = await request(app)
+        .post('/api/v1/users')
+        .send({
+          nickname: 'PanicUser',
+          phone: '13788887777',
+          email: 'panic@test.com',
+          role: 'MEMBER'
+        });
+
+      expect(res.status).toBe(500);
+      spy.mockRestore();
+    });
+
+    it('当审计日志写库触发异常时，应安全捕获而不打断主流程', async () => {
+      // 临时静默控制台错误输出，保持测试终端清爽
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const spy = (jest.spyOn(db, 'query') as any).mockRejectedValueOnce(new Error('AUDIT_DB_FAIL'));
+      const { AuditLogService } = require('../../audit/audit.service');
+
+      await expect(
+        AuditLogService.log({
+          operatorId: memberUserId,
+          operatorRole: 'MEMBER',
+          action: 'PII_READ',
+        })
+      ).resolves.not.toThrow();
+
+      spy.mockRestore();
+      consoleErrorSpy.mockRestore(); // 恢复控制台输出
     });
   });
 });

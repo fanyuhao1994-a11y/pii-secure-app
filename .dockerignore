@@ -1,8 +1,9 @@
 node_modules
-npm-debug.log
 dist
+coverage
 .git
-.gitignore
+.github
 .env
-.env.*
-README.md
+*.log
+.DS_Store
+src/**/__tests__

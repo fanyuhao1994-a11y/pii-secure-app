@@ -1,33 +1,36 @@
-# -----------------------------
-# 阶段 1: 编译阶段 (Builder)
-# -----------------------------
+# Stage 1: Build & Compile
 FROM node:20-alpine AS builder
+
 WORKDIR /app
 
-# 安装 argon2 等原生 C++ 模块编译所需的构建工具
+# 1. 安装 node-gyp 编译 argon2 所需的基础工具集
 RUN apk add --no-cache python3 make g++
 
-# 复制依赖定义并安装全部依赖
-COPY package*.json ./
+COPY package*.json tsconfig.json ./
 RUN npm ci
 
-# 复制项目源码并编译 TypeScript (生成 ./dist)
-COPY . .
+COPY src ./src
 RUN npm run build
 
-# 清理 devDependencies，仅保留生产依赖及已编译好的 native node_modules
-RUN npm prune --omit=dev
+# 2. 裁剪开发依赖，只保留生产运行所需的原生模块
+RUN npm prune --omit=dev && npm cache clean --force
 
-# -----------------------------
-# 阶段 2: 生产运行阶段 (Runner)
-# -----------------------------
-FROM node:20-alpine
+# Stage 2: Production Runner
+FROM node:20-alpine AS runner
+
 WORKDIR /app
 
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# 3. 直接从 builder 阶段拷贝编译好的原生依赖和 JS 构建产物（无需在 runner 安装编译工具）
 COPY package*.json ./
-# 直接从 builder 阶段复制编译好的生产依赖与产物，避免在 Runner 阶段二次编译
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
+# 切换非 root 用户
+USER node
+
 EXPOSE 3000
+
 CMD ["node", "dist/app.js"]

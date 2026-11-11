@@ -1,25 +1,43 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
-    restart: always
-    env_file:
-      - .env
-    ports:
-      - "3000:3000"
-    depends_on:
-      - db
-
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
+    container_name: pii_postgres
     restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME:-pii_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: pii_secure_db
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pii_api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgrespassword@db:5432/pii_secure_db
+      PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      PII_BLIND_INDEX_SALT: test-salt-string-for-blind-index
+      JWT_SECRET: super-secure-jwt-secret-for-production
+      SENTRY_DSN: ""
 
 volumes:
-  postgres_data:
+  pgdata:
