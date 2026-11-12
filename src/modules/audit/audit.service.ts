@@ -3,7 +3,7 @@ import { db } from '../../db';
 export interface LogAccessDto {
   operatorId: string;
   operatorRole: string;
-  action: 'PII_READ' | 'BLIND_INDEX_SEARCH' | 'USER_REGISTER';
+  action: 'PII_READ' | 'BLIND_INDEX_SEARCH' | 'USER_REGISTER' | 'USER_LOGIN';
   targetUserId?: string;
   details?: Record<string, any>;
 }
@@ -28,5 +28,30 @@ export class AuditLogService {
     } catch (error) {
       console.error('⚠️ 写入审计日志失败:', error);
     }
+  }
+
+  /**
+   * 分页查询审计流水（按时间倒序）
+   */
+  static async getLogs(limit = 20, offset = 0) {
+    const listSql = `
+      SELECT id, operator_id, operator_role, action, target_user_id, details, created_at
+      FROM audit_logs
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+    const countSql = `SELECT COUNT(*)::int AS total FROM audit_logs`;
+
+    const [listRes, countRes] = await Promise.all([
+      db.query(listSql, [limit, offset]),
+      db.query(countSql)
+    ]);
+
+    return {
+      total: countRes.rows[0].total,
+      limit,
+      offset,
+      items: listRes.rows
+    };
   }
 }

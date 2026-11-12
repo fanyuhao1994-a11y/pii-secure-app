@@ -1,6 +1,8 @@
 import express from 'express';
 import * as Sentry from '@sentry/node';
 import userRouter from './modules/user/user.router';
+import authRouter from './modules/auth/auth.router';
+import auditRouter from './modules/audit/audit.router';
 import { autoMaskMiddleware } from './middlewares/privacy';
 
 const app = express();
@@ -18,8 +20,10 @@ if (process.env.NODE_ENV !== 'test') {
 app.use(express.json());
 app.use(autoMaskMiddleware);
 
-// 3. 业务路由（匹配测试套件的 /api/v1/users）
+// 3. 业务路由
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/audit-logs', auditRouter);
 
 // 根路由健康检查
 app.get('/', (req, res) => {
