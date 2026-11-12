@@ -8,7 +8,8 @@
     "start": "node dist/app.js",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "start:prod": "node -e \"require('./dist/db/migrator').runMigrations().then(()=>process.exit(0)).catch(()=>process.exit(1))\" && node dist/app.js"
   },
   "keywords": [],
   "author": "",
