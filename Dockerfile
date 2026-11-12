@@ -33,4 +33,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["node", "dist/app.js"]
+CMD ["sh", "-c", "node -e 'require("./dist/db/migrator").runMigrations().then(() => process.exit(0)).catch(() => process.exit(1))' && node dist/app.js"]
