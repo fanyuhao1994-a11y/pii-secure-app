@@ -125,13 +125,34 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-  # 阶段 4：自动部署至 AWS EC2（前 3 关全绿 + 仅 main 分支推送时触发）
+  # 阶段 4：动态放行 SSH -> 自动部署至 AWS EC2 -> 强制回收 SSH 权限
   deploy:
     name: Deploy to EC2
     needs: build-and-scan-image
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-southeast-2' }}
+
+      - name: Get GitHub Runner public IP
+        id: ip
+        run: echo "ipv4=$(curl -s https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
+
+      - name: Temporarily authorize SSH port in Security Group
+        id: open-sg
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.AWS_SG_ID }}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ip.outputs.ipv4 }}/32"
+          sleep 5
+
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -146,3 +167,12 @@ jobs:
             docker compose up -d --build --remove-orphans
             docker image prune -f
             docker compose ps
+
+      - name: Revoke temporary SSH port from Security Group
+        if: always() && steps.open-sg.outcome == 'success'
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.AWS_SG_ID }}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ip.outputs.ipv4 }}/32"
