@@ -23,7 +23,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# 3. 直接从 builder 阶段拷贝编译好的原生依赖和 JS 构建产物（无需在 runner 安装编译工具）
+# 3. 直接从 builder 阶段拷贝编译好的原生依赖和 JS 构建产物
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist

@@ -2,15 +2,19 @@ services:
   db:
     image: postgres:16-alpine
     container_name: pii_postgres
-    restart: always
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: pii_secure_db
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在环境中设置 DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-pii_secure_db}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-pii_secure_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,23 +24,48 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: pii_api
-    restart: always
+    restart: unless-stopped
+    # 1. 开启只读根文件系统，防止任何文件篡改或木马落盘
+    read_only: true
+    # 为系统临时文件及 npm 启动缓存提供纯内存空间
+    tmpfs:
+      - /tmp
+      - /home/node/.npm
+    # 2. 剥夺所有不必要的 Linux 内核权限，禁止提权
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - frontend_net
+      - backend_net
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgres://postgres:postgrespassword@db:5432/pii_secure_db
-      PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      PII_BLIND_INDEX_SALT: test-salt-string-for-blind-index
-      JWT_SECRET: super-secure-jwt-secret-for-production
-      SENTRY_DSN: ""
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-pii_secure_db}
+      # 对接第 1 步改造的多版本密钥环（不再在 compose 文件中硬编码明文）
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS:?请在环境中设置 PII_ENCRYPTION_KEYS}
+      ACTIVE_ENCRYPTION_KEY_VERSION: ${ACTIVE_ENCRYPTION_KEY_VERSION:-v1}
+      PII_BLIND_INDEX_SALTS: ${PII_BLIND_INDEX_SALTS:?请在环境中设置 PII_BLIND_INDEX_SALTS}
+      ACTIVE_BLIND_INDEX_SALT_VERSION: ${ACTIVE_BLIND_INDEX_SALT_VERSION:-v1}
+      JWT_SECRET: ${JWT_SECRET:?请在环境中设置 JWT_SECRET}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   caddy:
     image: caddy:2-alpine
     container_name: pii_caddy
-    restart: always
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -44,11 +73,23 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - frontend_net
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+
+networks:
+  # 前端入口网络：仅允许 Caddy 与 API 通信
+  frontend_net:
+    driver: bridge
+  # 纯内网：internal: true 彻底切断数据库与外网、Caddy 的所有网络通路
+  backend_net:
+    driver: bridge
+    internal: true
 
 volumes:
   pgdata:

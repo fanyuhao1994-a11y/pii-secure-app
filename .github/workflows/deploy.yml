@@ -2,16 +2,34 @@ name: CI/CD Pipeline & EC2 Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 阶段 1：PostgreSQL 服务容器 + 单元与集成测试门禁 + 依赖审计
+  # 阶段 1：静态密钥防泄漏扫描（防止误提交真实密钥或 .env）
+  secret-scan:
+    name: Secret Leak Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 阶段 2：PostgreSQL 服务容器 + 单元与集成测试门禁 + 依赖审计
   test-and-audit:
     name: Test Suite & Security Audit
+    needs: secret-scan
     runs-on: ubuntu-latest
 
     services:
@@ -50,12 +68,14 @@ jobs:
           NODE_ENV: test
           PORT: 3000
           DATABASE_URL: postgres://postgres:postgrespassword@localhost:5432/pii_secure_db
-          PII_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          PII_BLIND_INDEX_SALT: test-salt-string-for-blind-index
+          PII_ENCRYPTION_KEYS: v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          ACTIVE_ENCRYPTION_KEY_VERSION: v1
+          PII_BLIND_INDEX_SALTS: v1:c9cf5a1e7a0353c10441a3c547736fd5bd0865da0601382bfef5ef6dbe2a8f14
+          ACTIVE_BLIND_INDEX_SALT_VERSION: v1
           JWT_SECRET: super-secure-jwt-secret-for-testing
         run: npm test
 
-  # 阶段 2：构建镜像、Trivy 漏洞扫描、推送到 GHCR
+  # 阶段 3：构建镜像、Trivy 漏洞扫描、推送到 GHCR（仅 main 分支推送）
   build-and-scan-image:
     name: Build, Scan & Push Docker Image
     needs: test-and-audit
@@ -96,6 +116,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Push production Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -104,11 +125,12 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-  # 阶段 3：自动部署至 AWS EC2
+  # 阶段 4：自动部署至 AWS EC2（前 3 关全绿 + 仅 main 分支推送时触发）
   deploy:
     name: Deploy to EC2
     needs: build-and-scan-image
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -117,7 +139,10 @@ jobs:
           username: ubuntu
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            set -e
             cd /opt/pii-secure-app
             git fetch origin main
             git reset --hard origin/main
             docker compose up -d --build --remove-orphans
+            docker image prune -f
+            docker compose ps

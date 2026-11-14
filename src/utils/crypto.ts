@@ -1,71 +1,96 @@
-import crypto from 'node:crypto';
+import crypto from 'crypto';
 import { config } from '../config/env';
 
-const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12; // GCM 模式推荐 96-bit (12 bytes) IV
-
 /**
- * 1. 计算盲索引 (HMAC-SHA256)
- * 用于数据库精准查询。做规范化清洗（去前后空格 + 转小写），确保输入一致性。
+ * 将配置中的加密密钥转为 32 字节 Buffer
+ * 若为 64 位标准 Hex 字符串则按 hex 解析，否则按 utf8 兼容旧格式
  */
-export function getBlindIndex(plainText: string): string {
-  if (!plainText) return '';
-  const normalized = plainText.trim().toLowerCase();
-  return crypto
-    .createHmac('sha256', config.piiBlindIndexSalt)
-    .update(normalized)
-    .digest('hex');
+function resolveAesKeyBuffer(secret: string): Buffer {
+  if (/^[0-9a-fA-F]{64}$/.test(secret)) {
+    return Buffer.from(secret, 'hex');
+  }
+  return crypto.createHash('sha256').update(secret, 'utf8').digest();
 }
 
-/**
- * 2. 字段加密 (AES-256-GCM)
- * 格式: [IV(hex)]:[Ciphertext(hex)]:[AuthTag(hex)]
- */
-export function encryptField(plainText: string): string {
-  if (!plainText) return '';
+// 1. AES-256-GCM 认证加密（始终使用当前激活版本）
+export function encryptPii(plaintext: string): string {
+  if (!plaintext) return '';
+  const { activeVersion, keys } = config.encryptionKeyRing;
+  const key = resolveAesKeyBuffer(keys[activeVersion]);
+  const iv = crypto.randomBytes(12);
 
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(
-    ALGORITHM,
-    Buffer.from(config.piiEncryptionKey, 'hex'),
-    iv
-  );
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
 
-  let encrypted = cipher.update(plainText, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const tag = cipher.getAuthTag().toString('hex');
-
-  return `${iv.toString('hex')}:${encrypted}:${tag}`;
+  return `${activeVersion}:${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
-/**
- * 3. 字段解密 (AES-256-GCM)
- */
-export function decryptField(encryptedPayload: string): string {
-  if (!encryptedPayload) return '';
+// 2. AES-256-GCM 认证解密（同时兼容旧版 3 段式与新版 4 段式密文）
+export function decryptPii(ciphertextEnvelope: string): string {
+  if (!ciphertextEnvelope) return '';
 
-  const parts = encryptedPayload.split(':');
-  if (parts.length !== 3) {
+  const parts = ciphertextEnvelope.split(':');
+  let version: string;
+  let ivHex: string;
+  let tagHex: string;
+  let cipherHex: string;
+
+  if (parts.length === 3) {
+    // 兼容数据库里已有的无版本号历史密文，默认使用 v1 密钥
+    version = 'v1';
+    [ivHex, tagHex, cipherHex] = parts;
+  } else if (parts.length === 4) {
+    [version, ivHex, tagHex, cipherHex] = parts;
+  } else {
     throw new Error('解密失败：密文格式非法');
   }
 
-  const ivHex = parts[0];
-  const ciphertextHex = parts[1];
-  const tagHex = parts[2];
-
-  // 增加类型守卫防线，排除 undefined 可能性
-  if (!ivHex || !ciphertextHex || !tagHex) {
+  // 检查切分后的组件是否为空（例如 "::" 或 "1234::5678"）
+  if (!ivHex || !tagHex || !cipherHex) {
     throw new Error('解密失败：密文组件不完整');
   }
 
-  const decipher = crypto.createDecipheriv(
-    ALGORITHM,
-    Buffer.from(config.piiEncryptionKey, 'hex'),
-    Buffer.from(ivHex, 'hex')
-  );
+  const secret = config.encryptionKeyRing.keys[version];
+  if (!secret) {
+    throw new Error(`解密失败：不支持的密钥版本 ${version}`);
+  }
+
+  const key = resolveAesKeyBuffer(secret);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
 
-  let decrypted = decipher.update(ciphertextHex, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(cipherHex, 'hex')),
+    decipher.final(),
+  ]);
+  return decrypted.toString('utf8');
 }
+
+// 3. HMAC-SHA256 盲索引（写入用：使用当前激活版本 Salt）
+export function createBlindIndex(normalizedValue: string): string {
+  if (!normalizedValue) return '';
+  const { activeVersion, keys } = config.blindIndexSaltRing;
+  const activeSalt = keys[activeVersion];
+  // 保持与原有 createHmac('sha256', saltString) 完全一致的 utf8 编码行为
+  return crypto
+    .createHmac('sha256', activeSalt)
+    .update(normalizedValue.trim().toLowerCase(), 'utf8')
+    .digest('hex');
+}
+
+// 4. HMAC-SHA256 盲索引（查询用：返回所有已加载版本的候选哈希列表）
+export function createCandidateBlindIndexes(normalizedValue: string): string[] {
+  const normalized = normalizedValue.trim().toLowerCase();
+  return Object.values(config.blindIndexSaltRing.keys).map((salt) =>
+    crypto.createHmac('sha256', salt).update(normalized, 'utf8').digest('hex')
+  );
+}
+
+// ==========================================
+// 兼容别名：让原有业务代码中的旧函数名无缝指向新实现
+// ==========================================
+export const encryptField = encryptPii;
+export const decryptField = decryptPii;
+export const getBlindIndex = createBlindIndex;
+export const getCandidateBlindIndexes = createCandidateBlindIndexes;

@@ -1,3 +1,36 @@
+{
+	# 全局日志配置：自动抹除 URL 查询参数与身份凭证头，防止敏感信息写入访问日志
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri_query delete
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}
+
 3.26.15.122.sslip.io {
-    reverse_proxy api:3000
+	# 开启当前站点的访问日志（受上方全局过滤器脱敏保护）
+	log
+
+	# 1. 限制单次请求体最大 1MB，防止超大载荷打满内存
+	request_body {
+		max_size 1MB
+	}
+
+	# 2. 下发浏览器安全护盾响应头，并隐藏 Caddy 服务器指纹
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# 3. 反向代理至后端 API 容器
+	reverse_proxy api:3000
 }
