@@ -21,5 +21,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   operator_role VARCHAR(20) NOT NULL,
   action VARCHAR(50) NOT NULL,
   target_user_id UUID NOT NULL,
+  details JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
