@@ -5,6 +5,8 @@ import authRouter from './modules/auth/auth.router';
 import auditRouter from './modules/audit/audit.router';
 import { autoMaskMiddleware } from './middlewares/privacy';
 import { db } from './db';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerDocument } from './config/swagger';
 
 const app = express();
 
@@ -37,6 +39,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 // 3. 基础解析（显式限制 JSON 体积上限）与安全脱敏中间件
 app.use(express.json({ limit: '100kb' }));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.get('/api-docs.json', (req, res) => {
+  res.json(swaggerDocument);
+});
 app.use(autoMaskMiddleware);
 
 // 4. 业务路由

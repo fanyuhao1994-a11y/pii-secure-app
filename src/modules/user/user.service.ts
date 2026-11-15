@@ -49,7 +49,14 @@ export class UserService {
       targetUserId: record.id
     });
 
-    return record;
+    return {
+      id: record.id,
+      nickname: record.nickname,
+      phone: dto.phone,
+      email: dto.email,
+      role: record.role,
+      created_at: record.created_at,
+    };
   }
 
   // 2. 基于盲索引精准查询 + 审计埋点
