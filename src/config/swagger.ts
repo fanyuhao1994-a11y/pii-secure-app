@@ -175,6 +175,7 @@ export const swaggerDocument: OpenAPIV3.Document = {
         responses: {
           '200': { description: '返回审计日志记录列表' },
           '401': { description: '未授权访问' },
+          '403': { description: '权限不足（仅 ADMIN 角色可查看审计日志）' },
         },
       },
     },
